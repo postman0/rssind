@@ -1,13 +1,16 @@
 "This module contains feeds-related classes."
 import datetime
 import sqlite3
+from collections import namedtuple
 import feedparser
 import apscheduler
-import pytz
 from dateutil.parser import parse
+from dateutil.tz import tzutc
 
 
 DATA_SUBDIR = "rssind/"
+
+Entry = namedtuple("Entry", ['id', 'title', 'link', 'description', 'pub_date'])
 
 
 class Feed(object):
@@ -23,7 +26,7 @@ class Feed(object):
         if readstr:
             self.last_read = parse(readstr)
         else:
-            self.last_read = pytz.utc.localize(datetime.datetime.min)
+            self.last_read = datetime.datetime.min.replace(tzinfo=tzutc())
         self._repo = feed_repo
 
     def update(self):
@@ -35,7 +38,7 @@ class Feed(object):
         if datetime_obj:
             self.last_read = datetime_obj
         else:
-            self.last_read = pytz.utc.localize(datetime.datetime.utcnow())
+            self.last_read = datetime.datetime.now(tzutc())
         self._save()
 
     def get_new_entries(self):
@@ -108,11 +111,12 @@ class FeedRepository(object):
         with sqlite3.connect(self.db_path) as conn:
             for entry in feed.entries:
                 conn.execute(
-                    """INSERT OR IGNORE INTO entries (id, feed_url, title, link, description, pub_date)
+                    """INSERT OR IGNORE INTO
+                    entries (id, feed_url, title, link, description, pub_date)
                     VALUES (?, ?, ?, ?, ?, ?);
-                    """, 
-                    (entry.id, feed.url, entry.title,
-                        entry.link, entry.description, parse(entry.published).isoformat()))
+                    """, (entry.id, feed.url, entry.title,
+                          entry.link, entry.description, parse(entry.published).isoformat())
+                    )
 
     def _save_feed(self, feed):
         "Saves feed data into the database."
@@ -128,15 +132,15 @@ class FeedRepository(object):
             cur = conn.cursor()
             if new_only:
                 cur.execute(
-                """ SELECT id, title, link, description, pub_date FROM entries
-                    WHERE feed_url = ? AND pub_date > ? ORDER BY pub_date ASC;
-                """, (feed.url, feed.last_read))
+                    """ SELECT id, title, link, description, pub_date FROM entries
+                        WHERE feed_url = ? AND pub_date > ? ORDER BY pub_date ASC;
+                    """, (feed.url, feed.last_read.isoformat()))
             else:
                 cur.execute(
                     """ SELECT id, title, link, description, pub_date FROM entries
                         WHERE feed_url = ? ORDER BY pub_date ASC;
                     """, (feed.url))
-            return list(cur)
+            return [Entry(*r) for r in cur]
 
     def add_by_url(self, feed_url, name=None):
         """Permanently adds a new feed.
