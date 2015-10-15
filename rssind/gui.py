@@ -1,5 +1,6 @@
 "This module contains GUI classes."
-from gi.repository import Gtk, AppIndicator3
+from threading import Thread
+from gi.repository import Gtk, AppIndicator3, GLib
 from signal import signal, SIGINT, SIG_DFL
 from .feeds import FeedRepository
 
@@ -16,7 +17,6 @@ class RssIndicator(object):
             AppIndicator3.IndicatorCategory.APPLICATION_STATUS
         )
         self.ind.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
-        self.rebuild_menu()
 
     def rebuild_menu(self, new_feeds=None):
         "Builds indicator's menu from new feed entries."
@@ -34,9 +34,17 @@ class RssIndicator(object):
         menu.show_all()
         self.ind.set_menu(menu)
 
+    def _start_updater(self):
+        self._upd_thread = Thread(target=lambda:
+            self.feed_repo.start_updater(1, #TODO how do i configure this shit
+                lambda feeds: GLib.idle_add(self.rebuild_menu, feeds)))
+        self._upd_thread.daemon = True
+        self._upd_thread.start()
+
     def start(self):
         "This method starts the application."
         self.feed_repo = FeedRepository()
         self.rebuild_menu(self.feed_repo.check_feeds())
+        self._start_updater()
         signal(SIGINT, SIG_DFL)
         Gtk.main()
