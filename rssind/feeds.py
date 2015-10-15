@@ -3,7 +3,7 @@ import datetime
 import sqlite3
 from collections import namedtuple
 import feedparser
-import apscheduler
+from apscheduler.schedulers.blocking import BlockingScheduler
 from dateutil.parser import parse
 from dateutil.tz import tzutc
 
@@ -154,3 +154,25 @@ class FeedRepository(object):
         feed = Feed(feed_data, self)
         feed._save()
         self.feeds.append(feed)
+
+    def check_feeds(self):
+        """Updates all feeds and returns a list of feeds which have new entries.
+        """
+        lst = []
+        for feed in self.feeds:
+            feed.update()
+            if feed.get_new_entries():
+                lst.append(feed)
+        return lst
+
+    def start_updater(self, interval, clbk):
+        """Starts feed autoupdater with the specified interval in minutes.
+        The callback will be called with a list of feeds which have new entries.
+        This is a blocking call."""
+        self._scheduler = BlockingScheduler(executors={
+            'default': {'type': 'threadpool', 'max_workers': 1}
+            })
+        def job():
+            clbk(self.check_feeds())
+        self._scheduler.add_job(job, trigger='interval', minutes=interval)
+        self._scheduler.start()
