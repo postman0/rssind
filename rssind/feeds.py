@@ -110,6 +110,7 @@ class FeedRepository(object):
         feed = feedparser.parse(feed.url)
         with sqlite3.connect(self.db_path) as conn:
             for entry in feed.entries:
+                print(entry)
                 conn.execute(
                     """INSERT OR IGNORE INTO
                     entries (id, feed_url, title, link, description, pub_date)
