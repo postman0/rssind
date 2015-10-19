@@ -22,6 +22,7 @@ class RssIndicator(object):
         "Builds indicator's menu from new feed entries."
 
         menu = Gtk.Menu()
+
         def _set_feed_as_read(feed, menu_item):
             feed.set_read_date()
             # loop over the children, removing items from the read feed
@@ -29,7 +30,6 @@ class RssIndicator(object):
             for item in menu:
                 if found:
                     if type(item) == Gtk.MenuItem:
-                        print(item)
                         menu.remove(item)
                     else:
                         break
@@ -41,14 +41,18 @@ class RssIndicator(object):
         for feed in new_feeds or []:
             itm = Gtk.ImageMenuItem.new_from_stock("application-rss+xml", None)
             itm.set_label(feed.name)
-            itm.connect("activate", 
-                (lambda feed: lambda menu_item: _set_feed_as_read(feed, menu_item))(feed))
+            itm.connect(
+                "activate",
+                (lambda feed: lambda menu_item: _set_feed_as_read(feed, menu_item))(feed)
+            )
             menu.append(itm)
             for entry in feed.get_new_entries():
                 entry_item = Gtk.MenuItem.new_with_label(entry.title)
-                entry_item.connect("activate",
+                entry_item.connect(
+                    "activate",
                     (lambda entry:
-                        lambda menuitem: Gtk.show_uri(None, entry.link, Gdk.CURRENT_TIME))(entry))
+                        lambda menuitem: Gtk.show_uri(None, entry.link, Gdk.CURRENT_TIME))(entry)
+                )
                 menu.append(entry_item)
         menu.append(Gtk.SeparatorMenuItem())
         exit_item = Gtk.ImageMenuItem.new_from_stock(Gtk.STOCK_QUIT, None)
@@ -58,9 +62,13 @@ class RssIndicator(object):
         self.ind.set_menu(menu)
 
     def _start_updater(self):
-        self._upd_thread = Thread(target=lambda:
-            self.feed_repo.start_updater(5, #TODO how do i configure this shit
-                lambda feeds: GLib.idle_add(self.rebuild_menu, feeds)))
+        self._upd_thread = Thread(
+            target=lambda:
+            self.feed_repo.start_updater(
+                5,  # TODO how do i configure this shit
+                lambda feeds: GLib.idle_add(self.rebuild_menu, feeds)
+                )
+        )
         self._upd_thread.daemon = True
         self._upd_thread.start()
 

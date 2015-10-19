@@ -178,7 +178,9 @@ class FeedRepository(object):
         self._scheduler = BlockingScheduler(executors={
             'default': {'type': 'threadpool', 'max_workers': 1}
             })
+
         def job():
             clbk(self.check_feeds())
+
         self._scheduler.add_job(job, trigger='interval', minutes=interval)
         self._scheduler.start()
