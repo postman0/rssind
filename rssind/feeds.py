@@ -2,6 +2,7 @@
 import datetime
 import sqlite3
 from collections import namedtuple
+import xml.etree.ElementTree as ET
 import feedparser
 from apscheduler.schedulers.blocking import BlockingScheduler
 from dateutil.parser import parse
@@ -160,6 +161,15 @@ class FeedRepository(object):
         feed = Feed(feed_data, self)
         feed._save()
         self.feeds.append(feed)
+
+    def import_opml(self, path):
+        """This method imports a set of feeds from the OPML file designated by path."""
+        tree = ET.parse(path)
+        root = tree.getroot()
+        for feed_el in root.find('body').findall('outline'):
+            if feed_el.get('type') == 'rss':
+                self.add_by_url(feed_el.get('xmlUrl'), feed_el.get('text'))
+
 
     def check_feeds(self):
         """Updates all feeds and returns a list of feeds which have new entries.
