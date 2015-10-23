@@ -111,7 +111,7 @@ class FeedRepository(object):
         feed = feedparser.parse(feed.url)
         with sqlite3.connect(self.db_path) as conn:
             for entry in feed.entries:
-                # > news feed entries not having publishing date
+                # > news feed entries not having publishing date and/or id
                 # fucking genius idea
                 if 'published' not in entry:
                     pub_date = datetime.datetime.now(tzutc())
@@ -121,8 +121,8 @@ class FeedRepository(object):
                     """INSERT OR IGNORE INTO
                     entries (id, feed_url, title, link, description, pub_date)
                     VALUES (?, ?, ?, ?, ?, ?);
-                    """, (entry.id, feed.url, entry.title,
-                          entry.link, entry.description, pub_date.isoformat())
+                    """, (entry.get('id', entry.title), feed.url, entry.title,
+                          entry.link, entry.get('description', ''), pub_date.isoformat())
                     )
 
     def _save_feed(self, feed):
