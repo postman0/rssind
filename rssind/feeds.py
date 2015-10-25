@@ -4,9 +4,8 @@ import sqlite3
 from collections import namedtuple
 import xml.etree.ElementTree as ET
 import feedparser
-from apscheduler.schedulers.blocking import BlockingScheduler
 from dateutil.parser import parse
-from dateutil.tz import tzutc
+from apscheduler.schedulers.blocking import BlockingScheduler
 
 
 DATA_SUBDIR = "rssind/"
@@ -23,11 +22,11 @@ class Feed(object):
         super(Feed, self).__init__()
         self.url = data['url']
         self.name = data.get('name')
-        readstr = data.get("last_read")
-        if readstr:
-            self.last_read = parse(readstr)
+        read_stamp = data.get("last_read")
+        if read_stamp:
+            self.last_read = datetime.datetime.fromtimestamp(read_stamp)
         else:
-            self.last_read = datetime.datetime.min.replace(tzinfo=tzutc())
+            self.last_read = datetime.datetime.fromtimestamp(0)
         self._repo = feed_repo
 
     def update(self):
@@ -39,7 +38,7 @@ class Feed(object):
         if datetime_obj:
             self.last_read = datetime_obj
         else:
-            self.last_read = datetime.datetime.now(tzutc())
+            self.last_read = datetime.datetime.now()
         self._save()
 
     def get_new_entries(self):
@@ -76,16 +75,16 @@ class FeedRepository(object):
                     """CREATE TABLE feeds (
                             url text PRIMARY KEY,
                             name text NOT NULL,
-                            last_read text NOT NULL
+                            last_read numeric NOT NULL
                         );
 
                     CREATE TABLE entries (
                             id text PRIMARY KEY,
-                            feed_url text,
+                            feed_url text NOT NULL,
                             title text,
                             link text,
                             description text,
-                            pub_date text NOT NULL,
+                            pub_date numeric NOT NULL,
                             FOREIGN KEY (feed_url) REFERENCES feeds (url) ON DELETE CASCADE
                         );
 
@@ -114,13 +113,13 @@ class FeedRepository(object):
                 # > news feed entries not having publishing date and/or id
                 # fucking genius idea
                 if 'published' not in entry:
-                    pub_date = datetime.datetime.now(tzutc())
+                    pub_date = datetime.datetime.now()
                 else:
                     pub_date = parse(entry.published)
                 conn.execute(
                     """INSERT OR IGNORE INTO
                     entries (id, feed_url, title, link, description, pub_date)
-                    VALUES (?, ?, ?, ?, ?, ?);
+                    VALUES (?, ?, ?, ?, ?, strftime('%s', ?));
                     """, (entry.get('id', entry.title), feed.url, entry.title,
                           entry.link, entry.get('description', ''), pub_date.isoformat())
                     )
@@ -129,7 +128,7 @@ class FeedRepository(object):
         "Saves feed data into the database."
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""INSERT OR REPLACE INTO feeds (url, name, last_read) VALUES
-                (?, ?, ?);
+                (?, ?, strftime('%s', ?));
                 """, (feed.url, feed.name, feed.last_read.isoformat()))
 
     def _get_feed_entries(self, feed, new_only=False):
@@ -140,7 +139,8 @@ class FeedRepository(object):
             if new_only:
                 cur.execute(
                     """ SELECT id, title, link, description, pub_date FROM entries
-                        WHERE feed_url = ? AND pub_date > ? ORDER BY pub_date ASC;
+                        WHERE feed_url = ? AND pub_date > CAST(strftime('%s', ?) as numeric)
+                        ORDER BY pub_date ASC;
                     """, (feed.url, feed.last_read.isoformat()))
             else:
                 cur.execute(
@@ -169,7 +169,6 @@ class FeedRepository(object):
         for feed_el in root.find('body').findall('outline'):
             if feed_el.get('type') == 'rss':
                 self.add_by_url(feed_el.get('xmlUrl'), feed_el.get('text'))
-
 
     def check_feeds(self):
         """Updates all feeds and returns a list of feeds which have new entries.
