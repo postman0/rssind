@@ -24,9 +24,9 @@ class Feed(object):
         self.name = data.get('name')
         read_stamp = data.get("last_read")
         if read_stamp:
-            self.last_read = datetime.datetime.fromtimestamp(read_stamp)
+            self.last_read = datetime.datetime.fromtimestamp(read_stamp, tz=datetime.timezone.utc)
         else:
-            self.last_read = datetime.datetime.fromtimestamp(0)
+            self.last_read = datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc)
         self._repo = feed_repo
 
     def update(self):
@@ -38,15 +38,21 @@ class Feed(object):
         if datetime_obj:
             self.last_read = datetime_obj
         else:
-            self.last_read = datetime.datetime.now()
+            self.last_read = datetime.datetime.now(tz=datetime.timezone.utc)
         self._save()
 
     def get_new_entries(self):
+        "Returns unread news entries from the database."
         return self._repo._get_feed_entries(self, True)
 
     def _save(self):
         "Saves feed data into the database."
         self._repo._save_feed(self)
+
+    def __repr__(self):
+        return "<Feed url:{} name:{} last_read:{}>".format(
+            self.url, self.name, self.last_read.isoformat()
+            )
 
 
 class FeedRepository(object):
@@ -113,23 +119,23 @@ class FeedRepository(object):
                 # > news feed entries not having publishing date and/or id
                 # fucking genius idea
                 if 'published' not in entry:
-                    pub_date = datetime.datetime.now()
+                    pub_date = datetime.datetime.now(tz=datetime.timezone.utc)
                 else:
                     pub_date = parse(entry.published)
                 conn.execute(
                     """INSERT OR IGNORE INTO
                     entries (id, feed_url, title, link, description, pub_date)
-                    VALUES (?, ?, ?, ?, ?, strftime('%s', ?));
+                    VALUES (?, ?, ?, ?, ?, ?);
                     """, (entry.get('id', entry.title), feed.url, entry.title,
-                          entry.link, entry.get('description', ''), pub_date.isoformat())
+                          entry.link, entry.get('description', ''), pub_date.timestamp())
                     )
 
     def _save_feed(self, feed):
         "Saves feed data into the database."
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""INSERT OR REPLACE INTO feeds (url, name, last_read) VALUES
-                (?, ?, strftime('%s', ?));
-                """, (feed.url, feed.name, feed.last_read.isoformat()))
+                (?, ?, ?);
+                """, (feed.url, feed.name, feed.last_read.timestamp()))
 
     def _get_feed_entries(self, feed, new_only=False):
         "Gets feed entries from the database."
@@ -137,11 +143,12 @@ class FeedRepository(object):
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             if new_only:
+                print(feed)
                 cur.execute(
                     """ SELECT id, title, link, description, pub_date FROM entries
-                        WHERE feed_url = ? AND pub_date > CAST(strftime('%s', ?) as numeric)
+                        WHERE feed_url = ? AND pub_date > ?
                         ORDER BY pub_date ASC;
-                    """, (feed.url, feed.last_read.isoformat()))
+                    """, (feed.url, feed.last_read.timestamp()))
             else:
                 cur.execute(
                     """ SELECT id, title, link, description, pub_date FROM entries
