@@ -143,7 +143,6 @@ class FeedRepository(object):
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             if new_only:
-                print(feed)
                 cur.execute(
                     """ SELECT id, title, link, description, pub_date FROM entries
                         WHERE feed_url = ? AND pub_date > ?
